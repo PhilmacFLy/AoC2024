@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
+	"time"
 )
 
 type field struct {
@@ -200,70 +202,122 @@ func part1(p puzzle) int {
 	return steps
 }
 
-func (p puzzle) CheckforLoop(x, y int, dx, dy int, dir string) bool {
+type counter struct {
+	value int
+	m     sync.Mutex
+}
+
+func (c *counter) inc() {
+	c.m.Lock()
+	c.value++
+	c.m.Unlock()
+}
+
+func (c *counter) get() int {
+	c.m.Lock()
+	defer c.m.Unlock()
+	return c.value
+}
+
+func (p puzzle) CheckforLoopParallel(x, y int, dx, dy int, c *counter, wg *sync.WaitGroup) {
+	defer wg.Done()
+	if p.CheckforLoop(x, y, dx, dy) {
+		c.inc()
+	}
+}
+
+func (p puzzle) CheckforLoop(x, y int, dx, dy int) bool {
+	visited := make(map[[4]int]bool)
+
 	for {
-		p[y][x].setDirection(dir)
+		state := [4]int{x, y, dx, dy}
+		if visited[state] {
+			// We have encountered the same position and direction again -> loop
+			return true
+		}
+		visited[state] = true
+
+		// Check if next step is outside the puzzle
 		if p.isBorder(x+dx, y+dy) {
 			return false
 		}
-		for p.isWall(x+dx, y+dy) {
-			dx, dy = turnRight(dx, dy)
-			dir = dxdyToString(dx, dy)
-		}
-		if !p.isBorder(x+dx, y+dy) {
-			if p[y+dy][x+dx].isDirection(dir) {
-				return true
+
+		// If there's a wall ahead, turn right until no wall or border
+		for {
+			if p.isBorder(x+dx, y+dy) {
+				// border encountered while looking for a way forward means no loop, just stop
+				return false
 			}
-			x += dx
-			y += dy
+			if !p.isWall(x+dx, y+dy) {
+				// found a free space ahead
+				break
+			}
+			dx, dy = turnRight(dx, dy)
+		}
+
+		// Move forward
+		x += dx
+		y += dy
+	}
+}
+
+func part2(p puzzle, parallel bool) int {
+	startX, startY := p.findStart()
+	// Determine the initial direction from the start symbol
+	var dx, dy int
+	for _, dir := range []string{"^", "v", "<", ">"} {
+		if p[startY][startX].isDirection(dir) {
+			switch dir {
+			case "^":
+				dx, dy = 0, -1
+			case "v":
+				dx, dy = 0, 1
+			case "<":
+				dx, dy = -1, 0
+			case ">":
+				dx, dy = 1, 0
+			}
 		}
 	}
 
-}
-
-func part2(p puzzle) int {
-	x, y := p.findStart()
-	fmt.Println("Start at:", x, y)
-	dx, dy := 0, -1
 	possibilites := 0
-	dir := "^"
-	for {
-		p[y][x].setDirection(dir)
-		if p.isBorder(x+dx, y+dy) {
-			p[y][x].setDirection(dir)
-			break
-		}
-		for p.isWall(x+dx, y+dy) {
-			dx, dy = turnRight(dx, dy)
-			dir = dxdyToString(dx, dy)
-		}
-		p[y][x].setDirection(dir)
-		if !p.isBorder(x+dx, y+dy) && !p.isWall(x+dx, y+dy) {
+	wg := sync.WaitGroup{}
+	c := counter{}
+
+	// Iterate over every cell that is not a wall and not the start position
+	for y := 0; y < len(p); y++ {
+		for x := 0; x < len(p[y]); x++ {
+			// Can't place at start or on an existing wall
+			if (x == startX && y == startY) || p[y][x].wall {
+				continue
+			}
+
+			// Make a copy of the puzzle and place a temp wall here
 			newp := copyPuzzle(p)
-			newp[x+dx][y+dy].tempwall = true
-			tempdx, tempdy := turnRight(dx, dy)
-			tempdir := dxdyToString(tempdx, tempdy)
-			if newp.CheckforLoop(x, y, tempdx, tempdy, tempdir) {
-				possibilites++
+			newp[y][x].tempwall = true
+
+			// Check if this causes a loop
+			if !parallel {
+				if newp.CheckforLoop(startX, startY, dx, dy) {
+					possibilites++
+				}
+			} else {
+				wg.Add(1)
+				go newp.CheckforLoopParallel(startX, startY, dx, dy, &c, &wg)
 			}
 		}
+	}
 
-		x += dx
-		y += dy
+	if parallel {
+		wg.Wait()
+		possibilites = c.get()
 	}
 	return possibilites
 }
 
 func main() {
-	fmt.Println("Example:")
-	p := loadFile("example.txt")
-	fmt.Println("Part1:", part1(p))
-	p = loadFile("example.txt")
-	fmt.Println("Part2:", part2(p))
-
-	fmt.Println("Input:")
-	p = loadFile("input.txt")
-	fmt.Println("Part1:", part1(p))
-	p = loadFile("input.txt")
-	fmt.Println("Part2:", part2(p))
+	p := loadFile("input.txt")
+	start := time.Now()
+	fmt.Println("Part2", part2(p, false))
+	fmt.Println("Duration:", time.Since(start))
 }
