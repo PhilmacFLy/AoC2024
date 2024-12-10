@@ -51,12 +51,14 @@ func (d *diskmap) defrag() {
 	i := len(*d) - 1
 	for i >= 0 {
 		if (*d)[i].isfile {
-			for j := 0; j < i; j++ {
+			j := 0
+			for j < i {
 				if !(*d)[j].isfile {
 					if (*d)[j].size == (*d)[i].size {
 						(*d)[j].isfile = true
 						(*d)[j].id = (*d)[i].id
 						(*d)[i].isfile = false
+						j++
 						break
 					} else if (*d)[j].size > (*d)[i].size {
 						(*d)[j].size -= (*d)[i].size
@@ -67,9 +69,11 @@ func (d *diskmap) defrag() {
 						(*d)[i].size -= (*d)[j].size
 						(*d)[j].isfile = true
 						(*d)[j].id = (*d)[i].id
+						j++
 						break
 					}
 				}
+				j++
 			}
 		}
 		i--
