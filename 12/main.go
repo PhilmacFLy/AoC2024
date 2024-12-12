@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 )
 
 type plot struct {
@@ -34,45 +33,6 @@ func (g garden) String() string {
 		res += "\n"
 	}
 	return res
-}
-
-func (g garden) Copy() garden {
-	var newg garden
-	for _, r := range g {
-		var newr []plot
-		for _, c := range r {
-			newr = append(newr, c)
-		}
-		newg = append(newg, newr)
-	}
-	return newg
-}
-
-func (g garden) WritetoFile(name string) {
-	f, err := os.Create(name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, r := range g {
-		for _, c := range r {
-			f.WriteString(c.plant)
-		}
-		f.WriteString("\n")
-	}
-}
-
-func (g garden) PrintRegions() {
-	for _, r := range g {
-		for _, c := range r {
-			r := strconv.Itoa(c.region)
-			if len(r) == 1 {
-				fmt.Print("0")
-			}
-			fmt.Print(r + " ")
-		}
-		fmt.Println()
-		fmt.Println()
-	}
 }
 
 func loadGarden(filename string) garden {
